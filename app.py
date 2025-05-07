@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import io
+import base64
 
 # Function to load the color dataset
 @st.cache_data
@@ -32,10 +33,16 @@ def find_closest_color(rgb, color_df):
     closest_idx = distances.idxmin()
     return color_df.loc[closest_idx, 'name']
 
+# Function to convert image to base64 for HTML display
+def image_to_base64(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode()
+
 # Streamlit app
 def main():
     st.title("Color Detection Application")
-    st.write("Upload an image and select a pixel to detect its color.")
+    st.write("Click anywhere on the image to detect the color at that point.")
 
     # Load color dataset
     color_df = load_color_dataset()
@@ -47,23 +54,116 @@ def main():
     
     if uploaded_file is not None:
         try:
-            # Read and display image
+            # Read and process image
             image = Image.open(uploaded_file)
             img_array = np.array(image)
             img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
             
-            # Display image with dimensions
-            st.image(image, caption=f"Image (Width: {img_array.shape[1]}px, Height: {img_array.shape[0]}px)", use_column_width=True)
+            # Initialize session state for click coordinates
+            if 'click_coords' not in st.session_state:
+                st.session_state.click_coords = None
+            if 'click_trigger' not in st.session_state:
+                st.session_state.click_trigger = 0
+
+            # Convert image to base64 for HTML
+            img_base64 = image_to_base64(image)
+
+            # HTML and JavaScript for clickable canvas
+            html_code = f"""
+            <div style="position: relative; display: inline-block;">
+                <canvas id="imageCanvas" style="max-width: 100%; height: auto;"></canvas>
+                <canvas id="overlayCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+            </div>
+            <p>Click on the image to select a pixel.</p>
+            <script>
+                const canvas = document.getElementById('imageCanvas');
+                const overlay = document.getElementById('overlayCanvas');
+                const ctx = canvas.getContext('2d');
+                const overlayCtx = overlay.getContext('2d');
+                const img = new Image();
+                img.src = 'data:image/png;base64,{img_base64}';
+                img.onload = function() {{
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    overlay.width = img.width;
+                    overlay.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    // Scale canvas to fit container
+                    const scale = Math.min(1, canvas.parentElement.clientWidth / img.width);
+                    canvas.style.width = (img.width * scale) + 'px';
+                    canvas.style.height = (img.height * scale) + 'px';
+                    overlay.style.width = (img.width * scale) + 'px';
+                    overlay.style.height = (img.height * scale) + 'px';
+                }};
+                canvas.addEventListener('click', function(e) {{
+                    const rect = canvas.getBoundingClientRect();
+                    const scale = canvas.width / rect.width;
+                    const x = Math.round((e.clientX - rect.left) * scale);
+                    const y = Math.round((e.clientY - rect.top) * scale);
+                    // Draw crosshair
+                    overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+                    overlayCtx.beginPath();
+                    overlayCtx.strokeStyle = 'red';
+                    overlayCtx.lineWidth = 2;
+                    overlayCtx.moveTo(x - 10, y);
+                    overlayCtx.lineTo(x + 10, y);
+                    overlayCtx.moveTo(x, y - 10);
+                    overlayCtx.lineTo(x, y + 10);
+                    overlayCtx.stroke();
+                    // Store coordinates in session storage
+                    sessionStorage.setItem('click_coords', JSON.stringify({{x: x, y: y}}));
+                    // Trigger Streamlit rerun
+                    const trigger = parseInt(sessionStorage.getItem('click_trigger') || '0') + 1;
+                    sessionStorage.setItem('click_trigger', trigger);
+                    document.getElementById('trigger').value = trigger;
+                    window.parent.postMessage({{
+                        type: 'streamlit:set_component_value',
+                        value: trigger
+                    }}, '*');
+                }});
+            </script>
+            <input type="hidden" id="trigger" value="0">
+            """
+            st.markdown(html_code, unsafe_allow_html=True)
+
+            # Check for click coordinates in session storage
+            trigger = st.session_state.get('click_trigger', 0)
+            coords = st.session_state.get('click_coords', None)
             
-            # Coordinate input for pixel selection
-            st.write("Enter X and Y coordinates to select a pixel (from top-left corner):")
-            col1, col2 = st.columns(2)
-            with col1:
-                x_coord = st.number_input("X coordinate", min_value=0, max_value=img_array.shape[1]-1, value=0, step=1)
-            with col2:
-                y_coord = st.number_input("Y coordinate", min_value=0, max_value=img_array.shape[0]-1, value=0, step=1)
-            
-            if st.button("Detect Color"):
+            # JavaScript to retrieve session storage values
+            st.markdown("""
+            <script>
+                function sendSessionStorage() {
+                    const coords = sessionStorage.getItem('click_coords');
+                    if (coords) {
+                        window.parent.postMessage({
+                            type: 'streamlit:set_component_value',
+                            value: coords
+                        }, '*');
+                    }
+                }
+                sendSessionStorage();
+            </script>
+            """, unsafe_allow_html=True)
+
+            # Process click coordinates
+            if st.session_state.click_trigger != trigger:
+                st.session_state.click_trigger = trigger
+                try:
+                    coords_data = st.session_state.get('click_coords', None)
+                    if coords_data:
+                        coords = eval(coords_data) if isinstance(coords_data, str) else coords_data
+                        x_coord, y_coord = coords['x'], coords['y']
+                        st.session_state.click_coords = (x_coord, y_coord)
+                except:
+                    st.error("Invalid coordinates received.")
+
+            # Display and process clicked coordinates
+            if st.session_state.click_coords:
+                x_coord, y_coord = st.session_state.click_coords
+                st.write(f"Selected Coordinates: X={x_coord}, Y={y_coord}")
+                
+                # Validate coordinates and detect color
                 if 0 <= x_coord < img_array.shape[1] and 0 <= y_coord < img_array.shape[0]:
                     # Get RGB values
                     b, g, r = img_bgr[y_coord, x_coord]
@@ -82,6 +182,7 @@ def main():
                     st.image(color_box_rgb, caption="Detected Color", width=100)
                 else:
                     st.error("Coordinates out of image bounds.")
+            
         except Exception as e:
             st.error(f"Error processing image: {e}")
 
