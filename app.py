@@ -9,7 +9,7 @@ import io
 @st.cache_data
 def load_color_dataset(file_path="colors.csv"):
     try:
-        df = pd.read_csv(file_path="colors.csv")
+        df = pd.read_csv(file_path)
         if not all(col in df.columns for col in ['name', 'red', 'green', 'blue']):
             st.error("Invalid color dataset format. Ensure columns: name, red, green, blue.")
             return None
