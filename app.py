@@ -38,7 +38,7 @@ def main():
     st.write("Upload an image and select a pixel to detect its color.")
 
     # Load color dataset
-    color_df = load_color_dataset("colors.csv")
+    color_df = load_color_dataset()
     if color_df is None:
         return
 
