@@ -30,7 +30,7 @@ def find_closest_color(rgb, color_df):
         (color_df['green'] - g) ** 2 +
         (color_df['blue'] - b) ** 2
     )
-    closest_idx = distances.idxmin()
+    closest_idx PERS = distances.idxmin()
     return color_df.loc[closest_idx, 'name']
 
 # Function to convert image to base64 for HTML display
@@ -62,8 +62,6 @@ def main():
             # Initialize session state for click coordinates
             if 'click_coords' not in st.session_state:
                 st.session_state.click_coords = None
-            if 'click_trigger' not in st.session_state:
-                st.session_state.click_trigger = 0
 
             # Convert image to base64 for HTML
             img_base64 = image_to_base64(image)
@@ -74,7 +72,7 @@ def main():
                 <canvas id="imageCanvas" style="max-width: 100%; height: auto;"></canvas>
                 <canvas id="overlayCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
             </div>
-            <p>Click on the image to select a pixel.</p>
+            <p>Click on the image to select a pixel. A yellow circle will mark the selected point.</p>
             <script>
                 const canvas = document.getElementById('imageCanvas');
                 const overlay = document.getElementById('overlayCanvas');
@@ -100,61 +98,33 @@ def main():
                     const scale = canvas.width / rect.width;
                     const x = Math.round((e.clientX - rect.left) * scale);
                     const y = Math.round((e.clientY - rect.top) * scale);
-                    // Draw crosshair
+                    // Draw yellow circle
                     overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
                     overlayCtx.beginPath();
-                    overlayCtx.strokeStyle = 'red';
-                    overlayCtx.lineWidth = 2;
-                    overlayCtx.moveTo(x - 10, y);
-                    overlayCtx.lineTo(x + 10, y);
-                    overlayCtx.moveTo(x, y - 10);
-                    overlayCtx.lineTo(x, y + 10);
+                    overlayCtx.arc(x, y, 5, 0, 2 * Math.PI);
+                    overlayCtx.fillStyle = 'yellow';
+                    overlayCtx.fill();
+                    overlayCtx.strokeStyle = 'black';
+                    overlayCtx.lineWidth = 1;
                     overlayCtx.stroke();
-                    // Store coordinates in session storage
-                    sessionStorage.setItem('click_coords', JSON.stringify({{x: x, y: y}}));
+                    // Update hidden input for Streamlit
+                    document.getElementById('coords').value = JSON.stringify({{x: x, y: y}});
                     // Trigger Streamlit rerun
-                    const trigger = parseInt(sessionStorage.getItem('click_trigger') || '0') + 1;
-                    sessionStorage.setItem('click_trigger', trigger);
-                    document.getElementById('trigger').value = trigger;
-                    window.parent.postMessage({{
-                        type: 'streamlit:set_component_value',
-                        value: trigger
-                    }}, '*');
+                    document.getElementById('trigger').value = Date.now();
                 }});
             </script>
+            <input type="hidden" id="coords" value="">
             <input type="hidden" id="trigger" value="0">
             """
             st.markdown(html_code, unsafe_allow_html=True)
 
-            # Check for click coordinates in session storage
-            trigger = st.session_state.get('click_trigger', 0)
-            coords = st.session_state.get('click_coords', None)
-            
-            # JavaScript to retrieve session storage values
-            st.markdown("""
-            <script>
-                function sendSessionStorage() {
-                    const coords = sessionStorage.getItem('click_coords');
-                    if (coords) {
-                        window.parent.postMessage({
-                            type: 'streamlit:set_component_value',
-                            value: coords
-                        }, '*');
-                    }
-                }
-                sendSessionStorage();
-            </script>
-            """, unsafe_allow_html=True)
-
-            # Process click coordinates
-            if st.session_state.click_trigger != trigger:
-                st.session_state.click_trigger = trigger
+            # Capture coordinates from hidden input
+            coords_input = st.text_input("Coordinates (auto-updated)", key="coords_input", value="", disabled=True)
+            if coords_input:
                 try:
-                    coords_data = st.session_state.get('click_coords', None)
-                    if coords_data:
-                        coords = eval(coords_data) if isinstance(coords_data, str) else coords_data
-                        x_coord, y_coord = coords['x'], coords['y']
-                        st.session_state.click_coords = (x_coord, y_coord)
+                    coords = eval(coords_input)
+                    x_coord, y_coord = coords['x'], coords['y']
+                    st.session_state.click_coords = (x_coord, y_coord)
                 except:
                     st.error("Invalid coordinates received.")
 
