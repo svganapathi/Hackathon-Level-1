@@ -30,7 +30,7 @@ def find_closest_color(rgb, color_df):
         (color_df['green'] - g) ** 2 +
         (color_df['blue'] - b) ** 2
     )
-    closest_idx PERS = distances.idxmin()
+    closest_idx = distances.idxmin()
     return color_df.loc[closest_idx, 'name']
 
 # Function to convert image to base64 for HTML display
