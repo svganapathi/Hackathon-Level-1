@@ -35,9 +35,13 @@ def find_closest_color(rgb, color_df):
 
 # Function to convert image to base64 for HTML display
 def image_to_base64(image):
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    return base64.b64encode(buffered.getvalue()).decode()
+    try:
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode()
+    except Exception as e:
+        st.error(f"Error encoding image to base64: {e}")
+        return None
 
 # Streamlit app
 def main():
@@ -59,12 +63,17 @@ def main():
             img_array = np.array(image)
             img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
             
+            # Fallback: Display image using st.image to confirm it loads correctly
+            st.image(image, caption="Uploaded Image (Fallback Display)", use_column_width=True)
+
             # Initialize session state for click coordinates
             if 'click_coords' not in st.session_state:
                 st.session_state.click_coords = None
 
             # Convert image to base64 for HTML
             img_base64 = image_to_base64(image)
+            if img_base64 is None:
+                return
 
             # HTML and JavaScript for clickable canvas
             html_code = f"""
@@ -92,6 +101,9 @@ def main():
                     canvas.style.height = (img.height * scale) + 'px';
                     overlay.style.width = (img.width * scale) + 'px';
                     overlay.style.height = (img.height * scale) + 'px';
+                }};
+                img.onerror = function() {{
+                    console.error('Failed to load image on canvas');
                 }};
                 canvas.addEventListener('click', function(e) {{
                     const rect = canvas.getBoundingClientRect();
