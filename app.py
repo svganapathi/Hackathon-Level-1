@@ -69,6 +69,8 @@ def main():
             # Initialize session state for click coordinates
             if 'click_coords' not in st.session_state:
                 st.session_state.click_coords = None
+            if 'click_counter' not in st.session_state:
+                st.session_state.click_counter = 0
 
             # Convert image to base64 for HTML
             img_base64 = image_to_base64(image)
@@ -78,7 +80,7 @@ def main():
             # HTML and JavaScript for clickable canvas
             html_code = f"""
             <div style="position: relative; display: inline-block;">
-                <canvas id="imageCanvas" style="max-width: 100%; height: auto;"></canvas>
+                <canvas id="imageCanvas" style="max-width: 100%; height: auto; cursor: crosshair;"></canvas>
                 <canvas id="overlayCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
             </div>
             <p>Click on the image to select a pixel. A yellow circle will mark the selected point.</p>
@@ -122,17 +124,23 @@ def main():
                     // Update hidden input for Streamlit
                     document.getElementById('coords').value = JSON.stringify({{x: x, y: y}});
                     // Trigger Streamlit rerun
-                    document.getElementById('trigger').value = Date.now();
+                    const counter = parseInt(document.getElementById('counter').value || '0') + 1;
+                    document.getElementById('counter').value = counter;
+                    // Log for debugging
+                    console.log('Clicked at: x=' + x + ', y=' + y);
                 }});
             </script>
             <input type="hidden" id="coords" value="">
-            <input type="hidden" id="trigger" value="0">
+            <input type="hidden" id="counter" value="{st.session_state.click_counter}">
             """
             st.markdown(html_code, unsafe_allow_html=True)
 
             # Capture coordinates from hidden input
             coords_input = st.text_input("Coordinates (auto-updated)", key="coords_input", value="", disabled=True)
-            if coords_input:
+            counter = st.text_input("Click Counter (auto-updated)", key="counter_input", value=str(st.session_state.click_counter), disabled=True)
+
+            if coords_input and counter != str(st.session_state.click_counter):
+                st.session_state.click_counter = int(counter)
                 try:
                     coords = eval(coords_input)
                     x_coord, y_coord = coords['x'], coords['y']
