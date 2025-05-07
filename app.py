@@ -7,7 +7,7 @@ import io
 
 # Function to load the color dataset
 @st.cache_data
-def load_color_dataset(colors.csv):
+def load_color_dataset(file_path="colors.csv"):
     try:
         df = pd.read_csv(file_path="colors.csv")
         if not all(col in df.columns for col in ['name', 'red', 'green', 'blue']):
